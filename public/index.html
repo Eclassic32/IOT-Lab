@@ -10,49 +10,71 @@
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1>⚖️ Weight Monitor</h1>
+        <header class="app-header">
+            <div class="brand">
+                <div class="brand-mark">⚖️</div>
+                <div class="brand-text">
+                    <h1>Weight Monitor</h1>
+                    <p class="subtitle">Real‑time IoT scale dashboard</p>
+                </div>
+            </div>
             <div class="status-container">
-                <div class="connection-status">
+                <div class="status-chip connection-status">
                     <span id="connection-indicator" class="indicator disconnected"></span>
                     <span id="connection-text">Connecting...</span>
                 </div>
-                <div class="mqtt-status">
+                <div class="status-chip mqtt-status">
                     <span id="mqtt-indicator" class="indicator disconnected"></span>
                     <span id="mqtt-text">MQTT: Waiting...</span>
                 </div>
             </div>
         </header>
 
-        <main>
-            <section class="weight-display-section">
-                <div class="weight-container">
-                    <div id="weight-value" class="weight-value">---</div>
-                    <div class="weight-unit">kg</div>
-                </div>
-                <div id="last-update" class="last-update">Waiting for data...</div>
-            </section>
-
-            <section class="graph-section">
-                <h2>5 Minute Weight History</h2>
-                <div class="chart-container">
-                    <canvas id="weightChart"></canvas>
-                </div>
-            </section>
-
-            <section class="logs-section">
-                <h2>Activity Log</h2>
-                <div id="logs-container">
-                    <div class="log-controls">
-                        <button id="clear-logs">Clear Logs</button>
-                        <button id="export-logs">Export CSV</button>
+        <main class="grid">
+            <section class="card weight-display-section">
+                <header class="card-header">
+                    <h2>Current Weight</h2>
+                </header>
+                <div class="card-body">
+                    <div class="weight-container">
+                        <div id="weight-value" class="weight-value">---</div>
+                        <div class="weight-unit">kg</div>
                     </div>
-                    <div id="logs-list">
-                        <p class="log-entry info">System started - waiting for connections</p>
+                    <div id="last-update" class="last-update">Waiting for data...</div>
+                </div>
+            </section>
+
+            <section class="card graph-section">
+                <header class="card-header">
+                    <h2>5‑Minute History</h2>
+                </header>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="weightChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card logs-section">
+                <header class="card-header">
+                    <h2>Activity Log</h2>
+                </header>
+                <div class="card-body">
+                    <div id="logs-container" class="logs-container">
+                        <div class="log-controls">
+                            <button id="clear-logs" class="btn btn-danger">Clear Logs</button>
+                            <button id="export-logs" class="btn btn-primary">Export CSV</button>
+                        </div>
+                        <div id="logs-list" class="scroll">
+                            <p class="log-entry info">System started - waiting for connections</p>
+                        </div>
                     </div>
                 </div>
             </section>
         </main>
+        <footer class="app-footer">
+            <span>IoT Lab • ESP32 • MQTT</span>
+        </footer>
     </div>
 
     <script src="app.js"></script>
