@@ -139,3 +139,32 @@ server.listen(PORT, () => {
   console.log(`Web interface: http://localhost:${PORT}`);
   console.log(`Devices can connect to: ws://localhost:${PORT}`);
 });
+
+// Forceful shutdown on Ctrl+C / SIGTERM without waiting for lingering sockets
+const activeSockets = new Set();
+server.on('connection', (socket) => {
+  activeSockets.add(socket);
+  socket.on('close', () => activeSockets.delete(socket));
+});
+
+function shutdownImmediate(signal) {
+  console.log(`\n🛑 Received ${signal}. Forcing shutdown...`);
+  try {
+    // Stop accepting new connections
+    server.close();
+    // Close Socket.IO transports
+    if (io && io.close) io.close();
+  } catch (e) {
+    // no-op
+  }
+  // Destroy all active sockets to prevent server from hanging
+  activeSockets.forEach((s) => {
+    try { s.destroy(); } catch (_) {}
+  });
+  // Hard exit shortly after to ensure process terminates
+  setTimeout(() => process.exit(0), 100);
+}
+
+['SIGINT', 'SIGTERM'].forEach((sig) => {
+  process.on(sig, () => shutdownImmediate(sig));
+});

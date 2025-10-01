@@ -223,16 +223,30 @@ server.listen(PORT, () => {
   console.log('════════════════════════════════════════════');
 });
 
-// Graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\n🛑 Shutting down gracefully...');
-  
-  if (mqttClient) {
-    mqttClient.end();
-  }
-  
-  server.close(() => {
-    console.log('👋 Server closed. Goodbye!');
-    process.exit(0);
+// Forced shutdown: immediately terminate sockets and MQTT on Ctrl+C / SIGTERM
+const activeSockets = new Set();
+server.on('connection', (socket) => {
+  activeSockets.add(socket);
+  socket.on('close', () => activeSockets.delete(socket));
+});
+
+function shutdownImmediate(signal) {
+  console.log(`\n🛑 Received ${signal}. Forcing shutdown...`);
+  try {
+    if (io && io.close) io.close();
+  } catch (e) {}
+  try {
+    if (mqttClient) mqttClient.end(true);
+  } catch (e) {}
+  try {
+    server.close();
+  } catch (e) {}
+  activeSockets.forEach((s) => {
+    try { s.destroy(); } catch (_) {}
   });
+  setTimeout(() => process.exit(0), 100);
+}
+
+['SIGINT', 'SIGTERM'].forEach((sig) => {
+  process.on(sig, () => shutdownImmediate(sig));
 });
