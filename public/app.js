@@ -16,7 +16,7 @@ const exportLogsBtn = document.getElementById('export-logs');
 
 // Configuration elements
 const massPerItemInput = document.getElementById('mass-per-item');
-const totalMassInput = document.getElementById('total-mass');
+const boardMassInput = document.getElementById('board-mass');
 const itemCountInput = document.getElementById('item-count');
 const applyConfigBtn = document.getElementById('apply-config');
 const allowAddingToggle = document.getElementById('allow-adding');
@@ -25,9 +25,8 @@ const allowRemovingToggle = document.getElementById('allow-removing');
 // Inventory configuration
 let inventoryConfig = {
     massPerItem: 0.5,        // kg per item
-    initialTotalMass: 5.0,   // kg total stack
+    boardMass: 0.0,          // kg board/container (tare weight)
     initialItemCount: 10,    // number of items
-    baselineWeight: 0,       // calculated baseline (tare)
     allowAdding: true,
     allowRemoving: true
 };
@@ -215,8 +214,8 @@ function parseWeight(dataString) {
 function calculateItemCount(currentWeight) {
     if (inventoryConfig.massPerItem === 0) return 0;
     
-    // Calculate net weight (remove baseline/tare)
-    const netWeight = currentWeight - inventoryConfig.baselineWeight;
+    // Calculate net weight (subtract board/container mass from sensor reading)
+    const netWeight = currentWeight - inventoryConfig.boardMass;
     
     // Calculate item count
     let itemCount = Math.round(netWeight / inventoryConfig.massPerItem);
@@ -236,7 +235,7 @@ function calculateItemCount(currentWeight) {
 function applyConfiguration() {
     // Read values from inputs
     const massPerItem = parseFloat(massPerItemInput.value);
-    const totalMass = parseFloat(totalMassInput.value);
+    const boardMass = parseFloat(boardMassInput.value);
     const itemCount = parseInt(itemCountInput.value);
     
     // Validate inputs
@@ -244,8 +243,8 @@ function applyConfiguration() {
         alert('Mass per item must be a positive number');
         return;
     }
-    if (isNaN(totalMass) || totalMass < 0) {
-        alert('Total mass must be a non-negative number');
+    if (isNaN(boardMass) || boardMass < 0) {
+        alert('Board mass must be a non-negative number');
         return;
     }
     if (isNaN(itemCount) || itemCount < 1) {
@@ -255,11 +254,8 @@ function applyConfiguration() {
     
     // Update configuration
     inventoryConfig.massPerItem = massPerItem;
-    inventoryConfig.initialTotalMass = totalMass;
+    inventoryConfig.boardMass = boardMass;
     inventoryConfig.initialItemCount = itemCount;
-    
-    // Calculate baseline weight (weight of scale/container without items)
-    inventoryConfig.baselineWeight = totalMass - (massPerItem * itemCount);
     
     // Update toggles
     inventoryConfig.allowAdding = allowAddingToggle.checked;
@@ -267,15 +263,13 @@ function applyConfiguration() {
     
     // Reset stable counts
     lastStableItemCount = itemCount;
-    lastStableWeight = totalMass;
     
     // Clear buffer
     weightBuffer = [];
     
-    addLogEntry(`Configuration applied: ${massPerItem}kg/item, ${itemCount} items baseline, ${totalMass}kg total`, 'success');
+    addLogEntry(`Configuration applied: ${massPerItem}kg/item, ${boardMass}kg board mass, ${itemCount} items baseline`, 'success');
     
-    // Update display with current configuration
-    updateWeightDisplay(totalMass, new Date().toISOString());
+    // Note: Display will update with next sensor reading
     itemCountDisplay.textContent = itemCount;
 }
 
@@ -583,25 +577,6 @@ exportLogsBtn.addEventListener('click', () => {
 
 applyConfigBtn.addEventListener('click', () => {
     applyConfiguration();
-});
-
-// Auto-sync inputs when one changes
-massPerItemInput.addEventListener('change', () => {
-    const massPerItem = parseFloat(massPerItemInput.value);
-    const itemCount = parseInt(itemCountInput.value);
-    if (!isNaN(massPerItem) && !isNaN(itemCount)) {
-        const calculatedTotal = (massPerItem * itemCount) + inventoryConfig.baselineWeight;
-        totalMassInput.value = calculatedTotal.toFixed(2);
-    }
-});
-
-itemCountInput.addEventListener('change', () => {
-    const massPerItem = parseFloat(massPerItemInput.value);
-    const itemCount = parseInt(itemCountInput.value);
-    if (!isNaN(massPerItem) && !isNaN(itemCount)) {
-        const calculatedTotal = (massPerItem * itemCount) + inventoryConfig.baselineWeight;
-        totalMassInput.value = calculatedTotal.toFixed(2);
-    }
 });
 
 allowAddingToggle.addEventListener('change', () => {
