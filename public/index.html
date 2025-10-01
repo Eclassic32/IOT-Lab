@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Weight Monitor</title>
+    <title>Inventory Counter</title>
     <link rel="stylesheet" href="styles.css">
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -11,7 +11,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>⚖️ Weight Monitor</h1>
+            <h1>📦 Inventory Counter</h1>
             <div class="status-container">
                 <div class="connection-status">
                     <span id="connection-indicator" class="indicator disconnected"></span>
@@ -25,23 +25,64 @@
         </header>
 
         <main>
+            <!-- Configuration Panel -->
+            <section class="config-section">
+                <h2>📋 Inventory Configuration</h2>
+                <div class="config-container">
+                    <div class="config-item">
+                        <label for="mass-per-item">Mass per item (kg):</label>
+                        <input type="number" id="mass-per-item" step="0.001" min="0.001" value="0.500" />
+                    </div>
+                    <div class="config-item">
+                        <label for="total-mass">Total stack mass (kg):</label>
+                        <input type="number" id="total-mass" step="0.01" min="0" value="5.00" />
+                    </div>
+                    <div class="config-item">
+                        <label for="item-count">Number of items:</label>
+                        <input type="number" id="item-count" min="1" value="10" />
+                    </div>
+                    <div class="config-item">
+                        <button id="apply-config" class="config-btn">Apply Configuration</button>
+                    </div>
+                </div>
+                <div class="config-toggles">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="allow-adding" checked />
+                        <span>Allow Adding Items</span>
+                    </label>
+                    <label class="toggle-label">
+                        <input type="checkbox" id="allow-removing" checked />
+                        <span>Allow Removing Items</span>
+                    </label>
+                </div>
+            </section>
+
             <section class="weight-display-section">
-                <div class="weight-container">
-                    <div id="weight-value" class="weight-value">---</div>
-                    <div class="weight-unit">kg</div>
+                <div class="inventory-display">
+                    <div class="metric-box">
+                        <div class="metric-label">Current Weight</div>
+                        <div id="weight-value" class="weight-value">---</div>
+                        <div class="weight-unit">kg</div>
+                    </div>
+                    <div class="metric-box highlight">
+                        <div class="metric-label">Items on Scale</div>
+                        <div id="item-count-display" class="item-count-value">---</div>
+                        <div class="weight-unit">items</div>
+                    </div>
                 </div>
                 <div id="last-update" class="last-update">Waiting for data...</div>
+                <div id="inventory-status" class="inventory-status"></div>
             </section>
 
             <section class="graph-section">
-                <h2>5 Minute Weight History</h2>
+                <h2>📊 Inventory Changes (5 Minutes)</h2>
                 <div class="chart-container">
-                    <canvas id="weightChart"></canvas>
+                    <canvas id="inventoryChart"></canvas>
                 </div>
             </section>
 
             <section class="logs-section">
-                <h2>Activity Log</h2>
+                <h2>📝 Inventory Activity Log</h2>
                 <div id="logs-container">
                     <div class="log-controls">
                         <button id="clear-logs">Clear Logs</button>

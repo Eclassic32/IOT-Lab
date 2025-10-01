@@ -7,40 +7,83 @@ const connectionText = document.getElementById('connection-text');
 const mqttIndicator = document.getElementById('mqtt-indicator');
 const mqttText = document.getElementById('mqtt-text');
 const weightValue = document.getElementById('weight-value');
+const itemCountDisplay = document.getElementById('item-count-display');
 const lastUpdate = document.getElementById('last-update');
+const inventoryStatus = document.getElementById('inventory-status');
 const logsContainer = document.getElementById('logs-list');
 const clearLogsBtn = document.getElementById('clear-logs');
 const exportLogsBtn = document.getElementById('export-logs');
 
+// Configuration elements
+const massPerItemInput = document.getElementById('mass-per-item');
+const totalMassInput = document.getElementById('total-mass');
+const itemCountInput = document.getElementById('item-count');
+const applyConfigBtn = document.getElementById('apply-config');
+const allowAddingToggle = document.getElementById('allow-adding');
+const allowRemovingToggle = document.getElementById('allow-removing');
+
+// Inventory configuration
+let inventoryConfig = {
+    massPerItem: 0.5,        // kg per item
+    initialTotalMass: 5.0,   // kg total stack
+    initialItemCount: 10,    // number of items
+    baselineWeight: 0,       // calculated baseline (tare)
+    allowAdding: true,
+    allowRemoving: true
+};
+
 // Data storage
 let weightHistory = [];
+let itemCountHistory = [];
 let allLogs = [];
 const MAX_HISTORY_MINUTES = 5;
 const MAX_HISTORY_POINTS = 300; // 5 minutes * 60 seconds
 
+// Stabilization settings
+const STABILIZATION_TIME = 3000; // 3 seconds in milliseconds
+let weightBuffer = [];
+let lastStableWeight = 0;
+let lastStableItemCount = 0;
+let stabilizationTimer = null;
+
 // Chart initialization
-let weightChart = null;
+let inventoryChart = null;
 
 function initChart() {
-    const ctx = document.getElementById('weightChart').getContext('2d');
+    const ctx = document.getElementById('inventoryChart').getContext('2d');
     
-    weightChart = new Chart(ctx, {
+    inventoryChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: [],
             datasets: [{
+                label: 'Item Count',
+                data: [],
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                borderWidth: 3,
+                tension: 0.1,
+                fill: true,
+                pointRadius: 4,
+                pointHoverRadius: 7,
+                pointBackgroundColor: '#667eea',
+                pointBorderColor: '#fff',
+                pointBorderWidth: 2,
+                yAxisID: 'y'
+            }, {
                 label: 'Weight (kg)',
                 data: [],
                 borderColor: '#4299e1',
                 backgroundColor: 'rgba(66, 153, 225, 0.1)',
-                borderWidth: 3,
+                borderWidth: 2,
                 tension: 0.4,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 6,
+                fill: false,
+                pointRadius: 2,
+                pointHoverRadius: 5,
                 pointBackgroundColor: '#4299e1',
                 pointBorderColor: '#fff',
-                pointBorderWidth: 2
+                pointBorderWidth: 1,
+                yAxisID: 'y1'
             }]
         },
         options: {
@@ -99,19 +142,45 @@ function initChart() {
                     }
                 },
                 y: {
+                    type: 'linear',
                     display: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Item Count',
+                        font: {
+                            size: 14,
+                            weight: '600'
+                        },
+                        color: '#667eea'
+                    },
+                    grid: {
+                        color: 'rgba(102, 126, 234, 0.1)'
+                    },
+                    ticks: {
+                        stepSize: 1,
+                        color: '#667eea'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
                     title: {
                         display: true,
                         text: 'Weight (kg)',
                         font: {
                             size: 14,
                             weight: '600'
-                        }
+                        },
+                        color: '#4299e1'
                     },
                     grid: {
-                        color: 'rgba(0, 0, 0, 0.05)'
+                        drawOnChartArea: false
                     },
-                    beginAtZero: false
+                    ticks: {
+                        color: '#4299e1'
+                    }
                 }
             }
         }
@@ -143,6 +212,142 @@ function parseWeight(dataString) {
     return null;
 }
 
+function calculateItemCount(currentWeight) {
+    if (inventoryConfig.massPerItem === 0) return 0;
+    
+    // Calculate net weight (remove baseline/tare)
+    const netWeight = currentWeight - inventoryConfig.baselineWeight;
+    
+    // Calculate item count
+    let itemCount = Math.round(netWeight / inventoryConfig.massPerItem);
+    
+    // Apply constraints based on toggles
+    if (!inventoryConfig.allowAdding && itemCount > lastStableItemCount) {
+        itemCount = lastStableItemCount;
+    }
+    if (!inventoryConfig.allowRemoving && itemCount < lastStableItemCount) {
+        itemCount = lastStableItemCount;
+    }
+    
+    // Ensure non-negative
+    return Math.max(0, itemCount);
+}
+
+function applyConfiguration() {
+    // Read values from inputs
+    const massPerItem = parseFloat(massPerItemInput.value);
+    const totalMass = parseFloat(totalMassInput.value);
+    const itemCount = parseInt(itemCountInput.value);
+    
+    // Validate inputs
+    if (isNaN(massPerItem) || massPerItem <= 0) {
+        alert('Mass per item must be a positive number');
+        return;
+    }
+    if (isNaN(totalMass) || totalMass < 0) {
+        alert('Total mass must be a non-negative number');
+        return;
+    }
+    if (isNaN(itemCount) || itemCount < 1) {
+        alert('Item count must be at least 1');
+        return;
+    }
+    
+    // Update configuration
+    inventoryConfig.massPerItem = massPerItem;
+    inventoryConfig.initialTotalMass = totalMass;
+    inventoryConfig.initialItemCount = itemCount;
+    
+    // Calculate baseline weight (weight of scale/container without items)
+    inventoryConfig.baselineWeight = totalMass - (massPerItem * itemCount);
+    
+    // Update toggles
+    inventoryConfig.allowAdding = allowAddingToggle.checked;
+    inventoryConfig.allowRemoving = allowRemovingToggle.checked;
+    
+    // Reset stable counts
+    lastStableItemCount = itemCount;
+    lastStableWeight = totalMass;
+    
+    // Clear buffer
+    weightBuffer = [];
+    
+    addLogEntry(`Configuration applied: ${massPerItem}kg/item, ${itemCount} items baseline, ${totalMass}kg total`, 'success');
+    
+    // Update display with current configuration
+    updateWeightDisplay(totalMass, new Date().toISOString());
+    itemCountDisplay.textContent = itemCount;
+}
+
+function checkStabilization(currentWeight, timestamp) {
+    // Add to buffer
+    weightBuffer.push({ weight: currentWeight, timestamp: timestamp });
+    
+    // Keep only last 3 seconds of data
+    const cutoffTime = Date.now() - STABILIZATION_TIME;
+    weightBuffer = weightBuffer.filter(entry => 
+        new Date(entry.timestamp).getTime() > cutoffTime
+    );
+    
+    // Clear existing timer
+    if (stabilizationTimer) {
+        clearTimeout(stabilizationTimer);
+    }
+    
+    // Check if we have enough data (at least 3 readings)
+    if (weightBuffer.length < 3) {
+        return false;
+    }
+    
+    // Calculate variance to check stability
+    const weights = weightBuffer.map(entry => entry.weight);
+    const avgWeight = weights.reduce((a, b) => a + b, 0) / weights.length;
+    const variance = weights.reduce((sum, w) => sum + Math.pow(w - avgWeight, 2), 0) / weights.length;
+    const stdDev = Math.sqrt(variance);
+    
+    // If stable (low variance), process after stabilization time
+    if (stdDev < 0.05) { // Tolerance: 0.05kg standard deviation
+        stabilizationTimer = setTimeout(() => {
+            processStableWeight(avgWeight, timestamp);
+        }, STABILIZATION_TIME);
+        return true;
+    }
+    
+    return false;
+}
+
+function processStableWeight(avgWeight, timestamp) {
+    const currentItemCount = calculateItemCount(avgWeight);
+    const itemChange = currentItemCount - lastStableItemCount;
+    
+    // Only log if there's a change in item count
+    if (itemChange !== 0) {
+        const changeType = itemChange > 0 ? 'adding' : 'removing';
+        const absChange = Math.abs(itemChange);
+        
+        addLogEntry(
+            `${itemChange > 0 ? '➕' : '➖'} ${absChange} item${absChange !== 1 ? 's' : ''} ${itemChange > 0 ? 'added' : 'removed'}`,
+            changeType === 'adding' ? 'success' : 'warning',
+            avgWeight
+        );
+        
+        // Update status display
+        inventoryStatus.className = `inventory-status ${changeType}`;
+        inventoryStatus.textContent = `${itemChange > 0 ? '➕' : '➖'} ${absChange} item${absChange !== 1 ? 's' : ''} ${itemChange > 0 ? 'added' : 'removed'}`;
+        
+        // Add to history
+        addToHistory(avgWeight, currentItemCount, timestamp);
+        
+        // Update stable values
+        lastStableWeight = avgWeight;
+        lastStableItemCount = currentItemCount;
+    } else {
+        // No change, just stable
+        inventoryStatus.className = 'inventory-status stable';
+        inventoryStatus.textContent = `✓ Stable at ${currentItemCount} items`;
+    }
+}
+
 function updateWeightDisplay(weight, timestamp) {
     weightValue.textContent = weight.toFixed(2);
     weightValue.classList.add('updating');
@@ -152,13 +357,25 @@ function updateWeightDisplay(weight, timestamp) {
     }, 300);
     
     lastUpdate.textContent = `Last update: ${formatTimestamp(timestamp)}`;
+    
+    // Update item count display
+    const itemCount = calculateItemCount(weight);
+    itemCountDisplay.textContent = itemCount;
+    itemCountDisplay.classList.add('updating');
+    
+    setTimeout(() => {
+        itemCountDisplay.classList.remove('updating');
+    }, 300);
 }
 
-function addToHistory(weight, timestamp) {
-    weightHistory.push({
+function addToHistory(weight, itemCount, timestamp) {
+    const entry = {
         weight: weight,
+        itemCount: itemCount,
         timestamp: timestamp
-    });
+    };
+    
+    weightHistory.push(entry);
     
     // Keep only last 5 minutes of data
     const cutoffTime = Date.now() - (MAX_HISTORY_MINUTES * 60 * 1000);
@@ -175,16 +392,18 @@ function addToHistory(weight, timestamp) {
 }
 
 function updateChart() {
-    if (!weightChart || weightHistory.length === 0) return;
+    if (!inventoryChart || weightHistory.length === 0) return;
     
     const labels = weightHistory.map(entry => formatTimeShort(entry.timestamp));
-    const data = weightHistory.map(entry => entry.weight);
+    const itemData = weightHistory.map(entry => entry.itemCount);
+    const weightData = weightHistory.map(entry => entry.weight);
     
-    weightChart.data.labels = labels;
-    weightChart.data.datasets[0].data = data;
+    inventoryChart.data.labels = labels;
+    inventoryChart.data.datasets[0].data = itemData;
+    inventoryChart.data.datasets[1].data = weightData;
     
-    // Use 'none' mode for better performance with 1-second updates
-    weightChart.update('none');
+    // Use 'none' mode for better performance
+    inventoryChart.update('none');
 }
 
 function addLogEntry(message, type = 'info', weight = null) {
@@ -296,8 +515,9 @@ socket.on('iot-data', (data) => {
     
     if (weight !== null && !isNaN(weight)) {
         updateWeightDisplay(weight, data.timestamp);
-        addToHistory(weight, data.timestamp);
-        addLogEntry('Weight measurement received', 'info', weight);
+        
+        // Check for stabilization (3-second buffer)
+        checkStabilization(weight, data.timestamp);
     } else {
         addLogEntry(`Invalid weight data received: ${data.data}`, 'warning');
     }
@@ -309,12 +529,14 @@ socket.on('weight-history', (history) => {
     // Clear existing history and load from server
     weightHistory = [];
     
-    // Process historical data
+    // Process historical data - Note: old data won't have item counts, calculate them
     history.forEach(entry => {
         const weight = parseWeight(entry.data);
         if (weight !== null && !isNaN(weight)) {
+            const itemCount = calculateItemCount(weight);
             weightHistory.push({
                 weight: weight,
+                itemCount: itemCount,
                 timestamp: entry.timestamp
             });
         }
@@ -324,6 +546,8 @@ socket.on('weight-history', (history) => {
     if (weightHistory.length > 0) {
         const latest = weightHistory[weightHistory.length - 1];
         updateWeightDisplay(latest.weight, latest.timestamp);
+        lastStableWeight = latest.weight;
+        lastStableItemCount = latest.itemCount;
     }
     
     // Update chart with historical data
@@ -357,9 +581,45 @@ exportLogsBtn.addEventListener('click', () => {
     exportLogsToCSV();
 });
 
+applyConfigBtn.addEventListener('click', () => {
+    applyConfiguration();
+});
+
+// Auto-sync inputs when one changes
+massPerItemInput.addEventListener('change', () => {
+    const massPerItem = parseFloat(massPerItemInput.value);
+    const itemCount = parseInt(itemCountInput.value);
+    if (!isNaN(massPerItem) && !isNaN(itemCount)) {
+        const calculatedTotal = (massPerItem * itemCount) + inventoryConfig.baselineWeight;
+        totalMassInput.value = calculatedTotal.toFixed(2);
+    }
+});
+
+itemCountInput.addEventListener('change', () => {
+    const massPerItem = parseFloat(massPerItemInput.value);
+    const itemCount = parseInt(itemCountInput.value);
+    if (!isNaN(massPerItem) && !isNaN(itemCount)) {
+        const calculatedTotal = (massPerItem * itemCount) + inventoryConfig.baselineWeight;
+        totalMassInput.value = calculatedTotal.toFixed(2);
+    }
+});
+
+allowAddingToggle.addEventListener('change', () => {
+    inventoryConfig.allowAdding = allowAddingToggle.checked;
+    addLogEntry(`${allowAddingToggle.checked ? 'Enabled' : 'Disabled'} adding items`, 'info');
+});
+
+allowRemovingToggle.addEventListener('change', () => {
+    inventoryConfig.allowRemoving = allowRemovingToggle.checked;
+    addLogEntry(`${allowRemovingToggle.checked ? 'Enabled' : 'Disabled'} removing items`, 'info');
+});
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
-    addLogEntry('Weight monitoring system initialized', 'info');
+    addLogEntry('Inventory counting system initialized', 'info');
     updateConnectionStatus(false);
+    
+    // Apply initial configuration
+    applyConfiguration();
 });
