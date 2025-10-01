@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weight Monitor</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚖️ Weight Monitor</h1>
+            <div class="status-container">
+                <div class="connection-status">
+                    <span id="connection-indicator" class="indicator disconnected"></span>
+                    <span id="connection-text">Connecting...</span>
+                </div>
+                <div class="mqtt-status">
+                    <span id="mqtt-indicator" class="indicator disconnected"></span>
+                    <span id="mqtt-text">MQTT: Waiting...</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="weight-display-section">
+                <div class="weight-container">
+                    <div id="weight-value" class="weight-value">---</div>
+                    <div class="weight-unit">kg</div>
+                </div>
+                <div id="last-update" class="last-update">Waiting for data...</div>
+            </section>
+
+            <section class="graph-section">
+                <h2>5 Minute Weight History</h2>
+                <div class="chart-container">
+                    <canvas id="weightChart"></canvas>
+                </div>
+            </section>
+
+            <section class="logs-section">
+                <h2>Activity Log</h2>
+                <div id="logs-container">
+                    <div class="log-controls">
+                        <button id="clear-logs">Clear Logs</button>
+                        <button id="export-logs">Export CSV</button>
+                    </div>
+                    <div id="logs-list">
+                        <p class="log-entry info">System started - waiting for connections</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "name": "iot-web-app",
+  "version": "1.0.0",
+  "description": "IoT Web Application with Socket.IO",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js",
+    "start:mqtt": "node server/server-mqtt.js",
+    "dev": "nodemon server/server.js",
+    "dev:mqtt": "nodemon server/server-mqtt.js",
+    "device": "node device/iot-device.js",
+    "weight": "node device/weight-sensor.js",
+    "mqtt:device": "node device/mqtt-weight-sensor.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "mqtt": "^5.14.1",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "keywords": [
+    "iot",
+    "socket.io",
+    "real-time",
+    "web-app"
+  ],
+  "author": "",
+  "license": "MIT"
+}
