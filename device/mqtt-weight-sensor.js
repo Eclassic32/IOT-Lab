@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const mqtt = require('mqtt');
 
 class MQTTWeightSensor {

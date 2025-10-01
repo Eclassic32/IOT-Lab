@@ -1,18 +1,31 @@
 # Quick Start - MQTT Weight Monitor
 
+## Setup
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Copy environment file:**
+   ```bash
+   cp .env.example .env
+   ```
+
+3. **Configure (Optional):**
+   Edit `.env` to change MQTT broker or other settings
+
 ## Without MQTT Broker (Using Public Test Broker)
 
-If you don't have a local MQTT broker, you can use a public one for testing:
+If you don't have a local MQTT broker, use the public test broker (already set in `.env`):
 
 ### Terminal 1 - Start Server
 ```powershell
-$env:MQTT_BROKER = "mqtt://test.mosquitto.org:1883"
 npm run start:mqtt
 ```
 
 ### Terminal 2 - Start Device Simulator
 ```powershell
-$env:MQTT_BROKER = "mqtt://test.mosquitto.org:1883"
 npm run mqtt:device
 ```
 
@@ -32,7 +45,13 @@ choco install mosquitto
 
 **Or download from**: https://mosquitto.org/download/
 
-### Step 2: Start Mosquitto
+### Step 2: Configure for local broker
+Edit `.env` and change:
+```
+MQTT_BROKER=mqtt://localhost:1883
+```
+
+### Step 3: Start Mosquitto
 ```powershell
 # Start as service (Windows)
 net start mosquitto
@@ -41,17 +60,17 @@ net start mosquitto
 mosquitto -v
 ```
 
-### Step 3: Start Server
+### Step 4: Start Server
 ```powershell
 npm run start:mqtt
 ```
 
-### Step 4: Start Device Simulator
+### Step 5: Start Device Simulator
 ```powershell
 npm run mqtt:device
 ```
 
-### Step 5: Open Browser
+### Step 6: Open Browser
 `http://localhost:3000`
 
 ---

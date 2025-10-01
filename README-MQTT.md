@@ -49,30 +49,45 @@ sudo systemctl start mosquitto
 
 ## Installation
 
-```bash
-npm install
-```
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` to match your setup. See [CONFIGURATION.md](CONFIGURATION.md) for details.
 
 ## Configuration
 
-Set environment variables (optional):
+The application uses a `.env` file for configuration. Available options:
 
-```bash
-# Windows PowerShell
-$env:MQTT_BROKER = "mqtt://localhost:1883"
-$env:MQTT_TOPIC = "weight/sensor/#"
-$env:DEVICE_ID = "WEIGHT_SCALE_001"
+- `PORT`: HTTP/WebSocket server port (default: `3000`)
+- `MQTT_BROKER`: MQTT broker URL (default: `mqtt://localhost:1883`)
+- `MQTT_TOPIC`: Topic pattern to subscribe (default: `weight/sensor/#`)
+- `DEVICE_ID`: Device identifier (default: `WEIGHT_SCALE_001`)
+- `MAX_HISTORY_MINUTES`: Data retention time (default: `5`)
 
-# Linux/macOS
-export MQTT_BROKER="mqtt://localhost:1883"
-export MQTT_TOPIC="weight/sensor/#"
-export DEVICE_ID="WEIGHT_SCALE_001"
+### Quick Configuration
+
+Edit `.env` file or set environment variables:
+
+**Windows PowerShell:**
+```powershell
+$env:MQTT_BROKER = "mqtt://test.mosquitto.org:1883"
+npm run start:mqtt
 ```
 
-Default values:
-- `MQTT_BROKER`: `mqtt://localhost:1883`
-- `MQTT_TOPIC`: `weight/sensor/#`
-- `DEVICE_ID`: `WEIGHT_SCALE_001`
+**Linux/macOS:**
+```bash
+export MQTT_BROKER="mqtt://test.mosquitto.org:1883"
+npm run start:mqtt
+```
+
+See [CONFIGURATION.md](CONFIGURATION.md) for detailed configuration guide.
 
 ## Usage
 

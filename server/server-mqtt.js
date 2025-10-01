@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -25,7 +27,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // Store weight history on server
 const weightHistory = [];
-const MAX_HISTORY_MINUTES = 5;
+const MAX_HISTORY_MINUTES = parseInt(process.env.MAX_HISTORY_MINUTES) || 5;
 
 // Function to clean old data from history
 function cleanOldData() {
