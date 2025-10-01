@@ -202,6 +202,11 @@ body {
 
 }
 
+/* Unstable reading visual hint (amber) */
+.weight-value.unstable {
+    color: #facc15;
+}
+
 .weight-unit {
     font-size: 2.5rem;
     font-weight: 700;

@@ -349,6 +349,12 @@ socket.on('iot-data', (data) => {
         addToHistory(candidate, data.timestamp);
 
         const isStable = (data.status || '').toLowerCase() === 'stable';
+        // Toggle visual state for stability
+        if (isStable) {
+            weightValue.classList.remove('unstable');
+        } else {
+            weightValue.classList.add('unstable');
+        }
         if (isStable) {
             addLogEntry('Stable weight measurement', 'info', candidate);
         } else {
