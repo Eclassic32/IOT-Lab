@@ -19,9 +19,18 @@ const PORT = process.env.PORT || 3000;
 
 // MQTT Configuration
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
-// Prefer stabilized stream by default; fall back to raw if explicitly set
 // Subscribe to cleaned ESP32 values. Default to sensor namespace and ignore status subtopics
-const MQTT_TOPIC = process.env.MQTT_TOPIC || 'weight/sensor/#';
+function normalizeMqttTopic(input) {
+  let t = (input || '').trim();
+  if (!t) return 'weight/sensor/#';
+  // If no wildcard present, subscribe to everything under the path
+  if (!/[#+]/.test(t)) {
+    if (!t.endsWith('/')) t = t + '/';
+    t = t + '#';
+  }
+  return t;
+}
+const MQTT_TOPIC = normalizeMqttTopic(process.env.MQTT_TOPIC || 'weight/sensor/#');
 const MQTT_CLIENT_ID = 'iot-weight-server-' + Math.random().toString(16).slice(2, 8);
 
 // Serve static files from public directory
