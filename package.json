@@ -10,7 +10,10 @@
     "dev:mqtt": "nodemon server/server-mqtt.js",
     "device": "node device/iot-device.js",
     "weight": "node device/weight-sensor.js",
-    "mqtt:device": "node device/mqtt-weight-sensor.js"
+    "mqtt:device": "node device/mqtt-weight-sensor.js",
+    "test": "node test-inventory.js && node test-stabilization.js",
+    "test:inventory": "node test-inventory.js",
+    "test:stabilization": "node test-stabilization.js"
   },
   "dependencies": {
     "dotenv": "^16.3.1",
