@@ -80,10 +80,15 @@ function connectMQTT() {
     const raw = message.toString();
 
     const parts = topic.split('/');
-    const deviceId = parts[parts.length - 1] || 'WEIGHT_SCALE_001';
+    // For weight topic: weight/sensor/<DEVICE_ID>
+    // For status topic: weight/sensor/<DEVICE_ID>/status
+    const isStatusTopic = topic.endsWith('/status');
+    const deviceId = isStatusTopic
+      ? (parts.length >= 3 ? parts[parts.length - 2] : 'WEIGHT_SCALE_001')
+      : (parts[parts.length - 1] || 'WEIGHT_SCALE_001');
 
     // Handle status subtopics and keep latest flag per device
-    if (topic.endsWith('/status')) {
+    if (isStatusTopic) {
       const status = (raw || '').toString().trim().toLowerCase();
       deviceStatus.set(deviceId, status);
       console.log(`ℹ️  MQTT status [${deviceId}]: ${status}`);

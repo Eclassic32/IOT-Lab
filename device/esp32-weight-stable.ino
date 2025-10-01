@@ -1,11 +1,12 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <HX711_ADC.h>
+#include <cfloat>
 
 // ------- Wi-Fi / MQTT -------
 const char* WIFI_SSID     = "YOUR_WIFI_SSID";
 const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-const char* MQTT_HOST     = "192.168.1.100";   // IP/host брокера
+const char* MQTT_HOST     = "16.170.98.241";   // IP/host брокера
 const uint16_t MQTT_PORT  = 1883;
 const char* DEVICE_ID     = "WEIGHT_SCALE_001";
 const char* TOPIC_WEIGHT  = "weight/sensor/WEIGHT_SCALE_001"; // можно собрать как "weight/sensor/" + DEVICE_ID
