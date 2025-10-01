@@ -20,6 +20,12 @@ const MAX_HISTORY_POINTS = 300; // 5 minutes * 60 seconds
 
 // Chart initialization
 let weightChart = null;
+let currentWeight = null;
+let weightAnimFrame = null;
+let weightAnimStart = null;
+let weightAnimFrom = null;
+let weightAnimTo = null;
+const WEIGHT_ANIM_DURATION_MS = 600;
 
 function initChart() {
     const ctx = document.getElementById('weightChart').getContext('2d');
@@ -143,15 +149,55 @@ function parseWeight(dataString) {
     return null;
 }
 
-function updateWeightDisplay(weight, timestamp) {
-    weightValue.textContent = weight.toFixed(2);
+function easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+}
+
+function animateWeightTo(targetWeight, timestamp) {
+    // Initialize current weight if first run
+    if (currentWeight === null || isNaN(currentWeight)) {
+        currentWeight = targetWeight;
+        weightValue.textContent = currentWeight.toFixed(2);
+        lastUpdate.textContent = `Last update: ${formatTimestamp(timestamp)}`;
+        return;
+    }
+
+    // Cancel any ongoing animation
+    if (weightAnimFrame) {
+        cancelAnimationFrame(weightAnimFrame);
+        weightAnimFrame = null;
+    }
+
+    weightAnimStart = null;
+    weightAnimFrom = currentWeight;
+    weightAnimTo = targetWeight;
+    
+    // Add a subtle scale effect without color change
     weightValue.classList.add('updating');
-    
-    setTimeout(() => {
-        weightValue.classList.remove('updating');
-    }, 300);
-    
-    lastUpdate.textContent = `Last update: ${formatTimestamp(timestamp)}`;
+
+    const step = (now) => {
+        if (!weightAnimStart) weightAnimStart = now;
+        const elapsed = now - weightAnimStart;
+        const t = Math.min(1, elapsed / WEIGHT_ANIM_DURATION_MS);
+        const eased = easeOutCubic(t);
+        const value = weightAnimFrom + (weightAnimTo - weightAnimFrom) * eased;
+        weightValue.textContent = value.toFixed(2);
+
+        if (t < 1) {
+            weightAnimFrame = requestAnimationFrame(step);
+        } else {
+            currentWeight = targetWeight;
+            weightValue.textContent = currentWeight.toFixed(2);
+            weightValue.classList.remove('updating');
+            lastUpdate.textContent = `Last update: ${formatTimestamp(timestamp)}`;
+        }
+    };
+
+    weightAnimFrame = requestAnimationFrame(step);
+}
+
+function updateWeightDisplay(weight, timestamp) {
+    animateWeightTo(weight, timestamp);
 }
 
 function addToHistory(weight, timestamp) {
