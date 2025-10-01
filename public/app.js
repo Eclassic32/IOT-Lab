@@ -343,18 +343,18 @@ socket.on('iot-data', (data) => {
 
     // Always show latest reading in UI if it is a valid number
     if (candidate !== null && !isNaN(candidate)) {
-        updateWeightDisplay(candidate, data.timestamp);
-
-        // Add to history and chart for both stable and unstable readings
-        addToHistory(candidate, data.timestamp);
-
         const isStable = (data.status || '').toLowerCase() === 'stable';
-        // Toggle visual state for stability
+        // Toggle state BEFORE animating to ensure immediate color update
         if (isStable) {
             weightValue.classList.remove('unstable');
         } else {
             weightValue.classList.add('unstable');
         }
+
+        updateWeightDisplay(candidate, data.timestamp);
+
+        // Add to history and chart for both stable and unstable readings
+        addToHistory(candidate, data.timestamp);
         if (isStable) {
             addLogEntry('Stable weight measurement', 'info', candidate);
         } else {
@@ -413,8 +413,10 @@ socket.on('device-status', (payload) => {
     const s = (payload.status || '').toLowerCase();
     if (s === 'stable') {
         addLogEntry(`Device ${payload.deviceId} is stable`, 'success');
+        weightValue.classList.remove('unstable');
     } else if (s === 'unstable') {
         addLogEntry(`Device ${payload.deviceId} is unstable`, 'warning');
+        weightValue.classList.add('unstable');
     } else if (s) {
         addLogEntry(`Device ${payload.deviceId} status: ${s}`, 'info');
     }
