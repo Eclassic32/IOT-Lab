@@ -1,6 +1,6 @@
 # IoT Weight Monitor - MQTT to WebSocket Bridge
 
-This version receives weight data via MQTT and outputs it through WebSocket to the web dashboard.
+This version receives cleaned weight data (pre-filtered/stabilized on ESP32) via MQTT and outputs it through WebSocket to the web dashboard.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ This version receives weight data via MQTT and outputs it through WebSocket to t
 MQTT Weight Sensor → MQTT Broker → Server (MQTT to WebSocket) → Web Dashboard
 ```
 
-- **MQTT Device**: Publishes weight data to MQTT broker
+- **MQTT Device**: Publishes cleaned numeric weight (e.g. "75.50") and optional status to MQTT broker
 - **MQTT Broker**: Message broker (e.g., Mosquitto, HiveMQ)
 - **Server**: Subscribes to MQTT topics and broadcasts via WebSocket
 - **Web Dashboard**: Receives real-time data via WebSocket
@@ -67,7 +67,7 @@ The application uses a `.env` file for configuration. Available options:
 
 - `PORT`: HTTP/WebSocket server port (default: `3000`)
 - `MQTT_BROKER`: MQTT broker URL (default: `mqtt://localhost:1883`)
-- `MQTT_TOPIC`: Topic pattern to subscribe (default: `weight/sensor/#`)
+- `MQTT_TOPIC`: Topic pattern to subscribe (default: `weight/sensor/#`). The server ignores `.../status` subtopics and parses numeric payloads into `weightKg`.
 - `DEVICE_ID`: Device identifier (default: `WEIGHT_SCALE_001`)
 - `MAX_HISTORY_MINUTES`: Data retention time (default: `5`)
 
@@ -111,7 +111,7 @@ npm run start:mqtt
 
 The server will:
 - Connect to the MQTT broker
-- Subscribe to `weight/sensor/#` topic
+- Subscribe to `weight/sensor/#` topic (ignoring `.../status`)
 - Start WebSocket server on port 3000
 - Store last 5 minutes of data in memory
 
@@ -140,11 +140,13 @@ This matches topics like:
 
 ### Publishing Weight Data
 
-Your IoT device should publish weight as a string to the topic:
+Your IoT device should publish cleaned weight as a numeric string to the topic:
 
 ```bash
 # Using mosquitto_pub command
 mosquitto_pub -h localhost -t "weight/sensor/WEIGHT_SCALE_001" -m "75.50"
+# optional status
+mosquitto_pub -h localhost -t "weight/sensor/WEIGHT_SCALE_001/status" -m "stable"
 
 # Or continuously
 while true; do 
@@ -155,7 +157,7 @@ done
 
 ## Real IoT Device Integration
 
-### ESP32/ESP8266 (Arduino)
+### ESP32/ESP8266 (Arduino) - Cleaned Stream
 
 ```cpp
 #include <WiFi.h>
@@ -165,7 +167,8 @@ done
 const char* ssid = "YOUR_WIFI_SSID";
 const char* password = "YOUR_WIFI_PASSWORD";
 const char* mqtt_server = "192.168.1.100";  // Your MQTT broker IP
-const char* mqtt_topic = "weight/sensor/WEIGHT_SCALE_001";
+const char* mqtt_topic = "weight/sensor/WEIGHT_SCALE_001";      // cleaned weight
+const char* mqtt_status = "weight/sensor/WEIGHT_SCALE_001/status"; // optional status
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -197,12 +200,14 @@ void loop() {
   client.loop();
   
   // Read weight
-  float weight = scale.get_units(10);  // Average of 10 readings
+  float weight = scale.get_units(10);  // After your own filtering/stabilization
   
   // Publish to MQTT
   char weightStr[10];
   dtostrf(weight, 6, 2, weightStr);
   client.publish(mqtt_topic, weightStr);
+  // optionally
+  client.publish(mqtt_status, "stable");
   
   delay(1000);  // Publish every second
 }
@@ -277,7 +282,7 @@ Returns server status, MQTT connection, and data statistics.
 GET /api/history
 ```
 
-Returns last 5 minutes of weight measurements.
+Returns last 5 minutes of weight measurements. Each entry includes `data` (raw string) and, when parseable, `weightKg` (number).
 
 ## Features
 

@@ -19,6 +19,8 @@ const PORT = process.env.PORT || 3000;
 
 // MQTT Configuration
 const MQTT_BROKER = process.env.MQTT_BROKER || 'mqtt://localhost:1883';
+// Prefer stabilized stream by default; fall back to raw if explicitly set
+// Subscribe to cleaned ESP32 values. Default to sensor namespace and ignore status subtopics
 const MQTT_TOPIC = process.env.MQTT_TOPIC || 'weight/sensor/#';
 const MQTT_CLIENT_ID = 'iot-weight-server-' + Math.random().toString(16).slice(2, 8);
 
@@ -28,6 +30,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Store weight history on server
 const weightHistory = [];
 const MAX_HISTORY_MINUTES = parseInt(process.env.MAX_HISTORY_MINUTES) || 5;
+// Track latest status per device (stable/unstable/boot/tare)
+const deviceStatus = new Map();
 
 // Function to clean old data from history
 function cleanOldData() {
@@ -73,24 +77,49 @@ function connectMQTT() {
 
   mqttClient.on('message', (topic, message) => {
     const timestamp = new Date().toISOString();
-    const data = message.toString();
-    
-    console.log(`📥 MQTT [${topic}]: ${data}`);
-    
-    // Create enriched data object
+    const raw = message.toString();
+
+    const parts = topic.split('/');
+    const deviceId = parts[parts.length - 1] || 'WEIGHT_SCALE_001';
+
+    // Handle status subtopics and keep latest flag per device
+    if (topic.endsWith('/status')) {
+      const status = (raw || '').toString().trim().toLowerCase();
+      deviceStatus.set(deviceId, status);
+      console.log(`ℹ️  MQTT status [${deviceId}]: ${status}`);
+      // Also notify clients of status updates
+      io.emit('device-status', { deviceId, status, timestamp, topic });
+      return;
+    }
+
+    // Expect cleaned numeric payload from ESP32 (e.g. "75.50")
+    const weightKg = (() => {
+      const n = parseFloat(raw);
+      if (!Number.isNaN(n) && Number.isFinite(n)) return n;
+      const m = raw.match(/(\d+\.?\d*)/);
+      return m ? parseFloat(m[1]) : null;
+    })();
+
+    const statusFlag = (deviceStatus.get(deviceId) || 'unknown');
+    console.log(`📥 MQTT [${topic}]: ${raw}${weightKg != null ? ` → ${weightKg.toFixed(2)} kg` : ''}`);
+
     const enrichedData = {
-      deviceId: topic.split('/').pop() || 'WEIGHT_SCALE_001',
+      deviceId,
       deviceType: 'Weight Scale',
-      data: data,
-      timestamp: timestamp,
-      topic: topic
+      data: raw,
+      weightKg: weightKg != null ? weightKg : undefined,
+      status: statusFlag,
+      timestamp,
+      topic
     };
-    
-    // Store in weight history
-    weightHistory.push(enrichedData);
-    
-    // Broadcast to all connected web clients via WebSocket
+
+    // Always broadcast to UI so it can show current reading & status
     io.emit('iot-data', enrichedData);
+
+    // Only persist to history if stable
+    if (statusFlag === 'stable' && weightKg != null) {
+      weightHistory.push(enrichedData);
+    }
   });
 
   mqttClient.on('error', (err) => {

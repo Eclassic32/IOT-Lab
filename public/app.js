@@ -292,12 +292,22 @@ socket.on('device-disconnected', (device) => {
 });
 
 socket.on('iot-data', (data) => {
-    const weight = parseWeight(data.data);
-    
-    if (weight !== null && !isNaN(weight)) {
-        updateWeightDisplay(weight, data.timestamp);
-        addToHistory(weight, data.timestamp);
-        addLogEntry('Weight measurement received', 'info', weight);
+    // Prefer numeric field from server if present
+    const candidate = (typeof data.weightKg === 'number') ? data.weightKg : parseWeight(data.data);
+
+    // Always show latest reading in UI if it is a valid number
+    if (candidate !== null && !isNaN(candidate)) {
+        updateWeightDisplay(candidate, data.timestamp);
+
+        // Add to history and chart for both stable and unstable readings
+        addToHistory(candidate, data.timestamp);
+
+        const isStable = (data.status || '').toLowerCase() === 'stable';
+        if (isStable) {
+            addLogEntry('Stable weight measurement', 'info', candidate);
+        } else {
+            addLogEntry('Unstable reading (plotted, server not persisting)', 'warning', candidate);
+        }
     } else {
         addLogEntry(`Invalid weight data received: ${data.data}`, 'warning');
     }
@@ -343,6 +353,18 @@ socket.on('mqtt-status', (status) => {
         } else {
             addLogEntry('MQTT disconnected', 'warning');
         }
+    }
+});
+
+// Optional: listen for device-status updates
+socket.on('device-status', (payload) => {
+    const s = (payload.status || '').toLowerCase();
+    if (s === 'stable') {
+        addLogEntry(`Device ${payload.deviceId} is stable`, 'success');
+    } else if (s === 'unstable') {
+        addLogEntry(`Device ${payload.deviceId} is unstable`, 'warning');
+    } else if (s) {
+        addLogEntry(`Device ${payload.deviceId} status: ${s}`, 'info');
     }
 });
 
