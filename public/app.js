@@ -12,11 +12,28 @@ const logsContainer = document.getElementById('logs-list');
 const clearLogsBtn = document.getElementById('clear-logs');
 const exportLogsBtn = document.getElementById('export-logs');
 
+// Item counting DOM elements
+const itemCountValue = document.getElementById('item-count-value');
+const itemCountChange = document.getElementById('item-count-change');
+const configBtn = document.getElementById('config-btn');
+const resetCountBtn = document.getElementById('reset-count-btn');
+const configModal = document.getElementById('config-modal');
+const configForm = document.getElementById('item-config-form');
+
 // Data storage
 let weightHistory = [];
 let allLogs = [];
 const MAX_HISTORY_MINUTES = 5;
 const MAX_HISTORY_POINTS = 300; // 5 minutes * 60 seconds
+
+// Item counting data
+let currentItemCount = null;
+let itemCountAnimFrame = null;
+let itemCountAnimStart = null;
+let itemCountAnimFrom = null;
+let itemCountAnimTo = null;
+let itemConfig = null;
+const ITEM_COUNT_ANIM_DURATION_MS = 400;
 
 // Chart initialization
 let weightChart = null;
@@ -42,11 +59,11 @@ function initChart() {
                 borderWidth: 3,
                 tension: 0.4,
                 fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 6,
+                pointRadius: 0,
+                pointHoverRadius: 5,
                 pointBackgroundColor: '#4299e1',
                 pointBorderColor: '#fff',
-                pointBorderWidth: 2
+                pointBorderWidth: 0
             }]
         },
         options: {
@@ -198,6 +215,69 @@ function animateWeightTo(targetWeight, timestamp) {
 
 function updateWeightDisplay(weight, timestamp) {
     animateWeightTo(weight, timestamp);
+}
+
+// Item counting functions
+function animateItemCountTo(targetCount) {
+    // Initialize current item count if first run
+    if (currentItemCount === null || isNaN(currentItemCount)) {
+        currentItemCount = targetCount;
+        itemCountValue.textContent = currentItemCount;
+        return;
+    }
+
+    // Cancel any ongoing animation
+    if (itemCountAnimFrame) {
+        cancelAnimationFrame(itemCountAnimFrame);
+        itemCountAnimFrame = null;
+    }
+
+    itemCountAnimStart = null;
+    itemCountAnimFrom = currentItemCount;
+    itemCountAnimTo = targetCount;
+    
+    // Add a subtle scale effect
+    itemCountValue.classList.add('updating');
+
+    const step = (now) => {
+        if (!itemCountAnimStart) itemCountAnimStart = now;
+        const elapsed = now - itemCountAnimStart;
+        const t = Math.min(1, elapsed / ITEM_COUNT_ANIM_DURATION_MS);
+        const eased = easeOutCubic(t);
+        const value = Math.round(itemCountAnimFrom + (itemCountAnimTo - itemCountAnimFrom) * eased);
+        itemCountValue.textContent = value;
+
+        if (t < 1) {
+            itemCountAnimFrame = requestAnimationFrame(step);
+        } else {
+            currentItemCount = targetCount;
+            itemCountValue.textContent = currentItemCount;
+            itemCountValue.classList.remove('updating');
+        }
+    };
+
+    itemCountAnimFrame = requestAnimationFrame(step);
+}
+
+function updateItemCountDisplay(itemCount, countChange) {
+    if (itemCount !== null && itemCount !== undefined) {
+        animateItemCountTo(itemCount);
+    }
+    
+    // Show item count change
+    if (countChange && countChange !== 0) {
+        const changeText = countChange > 0 ? `+${countChange} items added` : `${countChange} items removed`;
+        itemCountChange.textContent = changeText;
+        itemCountChange.className = countChange > 0 ? 'item-count-change positive' : 'item-count-change negative';
+        
+        // Clear the change message after 3 seconds
+        setTimeout(() => {
+            if (itemCountChange.textContent === changeText) {
+                itemCountChange.textContent = '';
+                itemCountChange.className = 'item-count-change';
+            }
+        }, 3000);
+    }
 }
 
 function addToHistory(weight, timestamp) {
@@ -353,10 +433,19 @@ socket.on('iot-data', (data) => {
 
         updateWeightDisplay(candidate, data.timestamp);
 
+        // Update item count display if available
+        if (data.itemCount !== null && data.itemCount !== undefined) {
+            updateItemCountDisplay(data.itemCount, data.itemCountChange);
+        }
+
         // Add to history and chart for both stable and unstable readings
         addToHistory(candidate, data.timestamp);
         if (isStable) {
             addLogEntry('Stable weight measurement', 'info', candidate);
+            if (data.itemCountChange && data.itemCountChange !== 0) {
+                const changeText = data.itemCountChange > 0 ? `${data.itemCountChange} items added` : `${Math.abs(data.itemCountChange)} items removed`;
+                addLogEntry(changeText, 'info');
+            }
         } else {
             addLogEntry('Unstable reading (plotted, server not persisting)', 'warning', candidate);
         }
@@ -422,6 +511,135 @@ socket.on('device-status', (payload) => {
     }
 });
 
+// Item counting socket handlers
+socket.on('item-config', (data) => {
+    itemConfig = data.config;
+    currentItemCount = data.state.currentItemCount;
+    updateItemCountDisplay(currentItemCount, 0);
+    addLogEntry('Item counting configuration loaded', 'info');
+});
+
+socket.on('item-config-updated', (data) => {
+    itemConfig = data.config;
+    currentItemCount = data.state.currentItemCount;
+    updateItemCountDisplay(currentItemCount, 0);
+    addLogEntry('Item counting configuration updated', 'success');
+});
+
+socket.on('item-count-reset', (data) => {
+    currentItemCount = data.itemCount;
+    updateItemCountDisplay(currentItemCount, 0);
+    addLogEntry(`Item count reset to ${data.itemCount}`, 'info');
+});
+
+// Modal functions
+function openConfigModal() {
+    if (!itemConfig) {
+        // Request current config if not loaded
+        socket.emit('get-item-config');
+        setTimeout(openConfigModal, 100);
+        return;
+    }
+    
+    // Populate form with current configuration
+    document.getElementById('single-item-mass').value = itemConfig.singleItemMass;
+    document.getElementById('initial-item-count').value = itemConfig.initialItemCount;
+    document.getElementById('container-mass').value = itemConfig.containerMass;
+    document.getElementById('error-range-min').value = itemConfig.errorRangeMin;
+    document.getElementById('error-range-max').value = itemConfig.errorRangeMax;
+    document.getElementById('enable-adding').checked = itemConfig.enableAdding;
+    document.getElementById('enable-removing').checked = itemConfig.enableRemoving;
+    
+    configModal.style.display = 'block';
+}
+
+function closeConfigModal() {
+    configModal.style.display = 'none';
+}
+
+function saveItemConfig() {
+    const config = {
+        singleItemMass: parseFloat(document.getElementById('single-item-mass').value),
+        initialItemCount: parseInt(document.getElementById('initial-item-count').value),
+        containerMass: parseFloat(document.getElementById('container-mass').value),
+        errorRangeMin: parseFloat(document.getElementById('error-range-min').value),
+        errorRangeMax: parseFloat(document.getElementById('error-range-max').value),
+        enableAdding: document.getElementById('enable-adding').checked,
+        enableRemoving: document.getElementById('enable-removing').checked
+    };
+    
+    // Validate configuration
+    if (isNaN(config.singleItemMass) || config.singleItemMass <= 0) {
+        alert('Single item mass must be a positive number');
+        return;
+    }
+    if (isNaN(config.initialItemCount) || config.initialItemCount < 0) {
+        alert('Initial item count must be a non-negative number');
+        return;
+    }
+    if (isNaN(config.containerMass) || config.containerMass < 0) {
+        alert('Container mass must be a non-negative number');
+        return;
+    }
+    if (isNaN(config.errorRangeMin) || isNaN(config.errorRangeMax)) {
+        alert('Error range values must be valid numbers');
+        return;
+    }
+    
+    // Send configuration to server
+    fetch('/api/item-config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(config),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            closeConfigModal();
+            addLogEntry('Item counting configuration saved', 'success');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving configuration:', error);
+        alert('Failed to save configuration');
+    });
+}
+
+function resetItemCount() {
+    const newCount = prompt('Enter new item count:', currentItemCount || 0);
+    if (newCount === null) return;
+    
+    const count = parseInt(newCount);
+    if (isNaN(count) || count < 0) {
+        alert('Item count must be a non-negative number');
+        return;
+    }
+    
+    fetch('/api/reset-item-count', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ itemCount: count }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            addLogEntry(`Item count reset to ${count}`, 'success');
+        }
+    })
+    .catch(error => {
+        console.error('Error resetting count:', error);
+        alert('Failed to reset item count');
+    });
+}
+
 // Event listeners
 clearLogsBtn.addEventListener('click', () => {
     logsContainer.innerHTML = '';
@@ -433,9 +651,33 @@ exportLogsBtn.addEventListener('click', () => {
     exportLogsToCSV();
 });
 
+// Item counting event listeners
+configBtn.addEventListener('click', openConfigModal);
+resetCountBtn.addEventListener('click', resetItemCount);
+
+// Modal event listeners
+configModal.querySelector('.close').addEventListener('click', closeConfigModal);
+document.getElementById('cancel-config').addEventListener('click', closeConfigModal);
+configForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    saveItemConfig();
+});
+
+// Close modal when clicking outside
+window.addEventListener('click', (event) => {
+    if (event.target === configModal) {
+        closeConfigModal();
+    }
+});
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
     initChart();
     addLogEntry('Weight monitoring system initialized', 'info');
     updateConnectionStatus(false);
+    
+    // Request item counting configuration
+    setTimeout(() => {
+        socket.emit('get-item-config');
+    }, 1000);
 });

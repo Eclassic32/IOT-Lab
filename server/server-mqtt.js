@@ -35,12 +35,29 @@ const MQTT_CLIENT_ID = 'iot-weight-server-' + Math.random().toString(16).slice(2
 
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '../public')));
+app.use(express.json());
 
 // Store weight history on server
 const weightHistory = [];
 const MAX_HISTORY_MINUTES = parseInt(process.env.MAX_HISTORY_MINUTES) || 5;
 // Track latest status per device (stable/unstable/boot/tare)
 const deviceStatus = new Map();
+
+// Item counting configuration per device
+const itemCountingConfig = new Map();
+// Item counting state per device
+const itemCountingState = new Map();
+
+// Default item counting configuration
+const defaultItemConfig = {
+  singleItemMass: 0.1, // kg
+  initialItemCount: 0,
+  containerMass: 0, // kg
+  errorRangeMin: -0.05, // kg
+  errorRangeMax: 0.05, // kg
+  enableAdding: true,
+  enableRemoving: true
+};
 
 // Function to clean old data from history
 function cleanOldData() {
@@ -117,6 +134,49 @@ function connectMQTT() {
     const statusFlag = (deviceStatus.get(deviceId) || 'unknown');
     console.log(`📥 MQTT [${topic}]: ${raw}${weightKg != null ? ` → ${weightKg.toFixed(2)} kg` : ''}`);
 
+    // Calculate item count if configuration exists
+    let itemCount = null;
+    let itemCountChange = 0;
+    if (weightKg != null) {
+      const config = itemCountingConfig.get(deviceId) || defaultItemConfig;
+      const state = itemCountingState.get(deviceId) || { lastStableWeight: null, currentItemCount: config.initialItemCount };
+      
+      if (statusFlag === 'stable') {
+        if (state.lastStableWeight !== null) {
+          const weightDifference = weightKg - state.lastStableWeight;
+          const netWeight = weightKg - config.containerMass;
+          
+          // Check if weight change is significant enough (outside error range)
+          if (Math.abs(weightDifference) > Math.max(Math.abs(config.errorRangeMin), Math.abs(config.errorRangeMax))) {
+            // Calculate expected item count change
+            const expectedChange = Math.round(weightDifference / config.singleItemMass);
+            
+            // Apply change based on toggles
+            if ((expectedChange > 0 && config.enableAdding) || (expectedChange < 0 && config.enableRemoving)) {
+              state.currentItemCount += expectedChange;
+              state.currentItemCount = Math.max(0, state.currentItemCount); // Prevent negative count
+              itemCountChange = expectedChange;
+            }
+          }
+          
+          // Update last stable weight
+          state.lastStableWeight = weightKg;
+        } else {
+          // First stable reading - initialize
+          state.lastStableWeight = weightKg;
+          const netWeight = weightKg - config.containerMass;
+          state.currentItemCount = Math.max(0, Math.round(netWeight / config.singleItemMass));
+        }
+        
+        itemCount = state.currentItemCount;
+        itemCountingState.set(deviceId, state);
+      } else {
+        // For unstable readings, just calculate theoretical count
+        const netWeight = weightKg - config.containerMass;
+        itemCount = Math.max(0, Math.round(netWeight / config.singleItemMass));
+      }
+    }
+
     const enrichedData = {
       deviceId,
       deviceType: 'Weight Scale',
@@ -124,7 +184,9 @@ function connectMQTT() {
       weightKg: weightKg != null ? weightKg : undefined,
       status: statusFlag,
       timestamp,
-      topic
+      topic,
+      itemCount: itemCount,
+      itemCountChange: itemCountChange
     };
 
     // Always broadcast to UI so it can show current reading & status
@@ -180,6 +242,21 @@ io.on('connection', (socket) => {
     socket.emit('weight-history', weightHistory);
   });
 
+  // Handle item counting configuration requests
+  socket.on('get-item-config', (deviceId = 'WEIGHT_SCALE_001') => {
+    const config = itemCountingConfig.get(deviceId) || defaultItemConfig;
+    const state = itemCountingState.get(deviceId) || { lastStableWeight: null, currentItemCount: config.initialItemCount };
+    
+    socket.emit('item-config', {
+      deviceId,
+      config,
+      state: {
+        currentItemCount: state.currentItemCount,
+        lastStableWeight: state.lastStableWeight
+      }
+    });
+  });
+
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log(`🌐 Web client disconnected: ${socket.id}`);
@@ -209,6 +286,76 @@ app.get('/api/history', (req, res) => {
     dataPoints: weightHistory.length,
     history: weightHistory
   });
+});
+
+// Item counting configuration endpoints
+app.get('/api/item-config/:deviceId?', (req, res) => {
+  const deviceId = req.params.deviceId || 'WEIGHT_SCALE_001';
+  const config = itemCountingConfig.get(deviceId) || defaultItemConfig;
+  const state = itemCountingState.get(deviceId) || { lastStableWeight: null, currentItemCount: config.initialItemCount };
+  
+  res.json({
+    deviceId,
+    config,
+    state: {
+      currentItemCount: state.currentItemCount,
+      lastStableWeight: state.lastStableWeight
+    }
+  });
+});
+
+app.post('/api/item-config/:deviceId?', (req, res) => {
+  const deviceId = req.params.deviceId || 'WEIGHT_SCALE_001';
+  const config = {
+    singleItemMass: parseFloat(req.body.singleItemMass) || defaultItemConfig.singleItemMass,
+    initialItemCount: parseInt(req.body.initialItemCount) || defaultItemConfig.initialItemCount,
+    containerMass: parseFloat(req.body.containerMass) || defaultItemConfig.containerMass,
+    errorRangeMin: parseFloat(req.body.errorRangeMin) || defaultItemConfig.errorRangeMin,
+    errorRangeMax: parseFloat(req.body.errorRangeMax) || defaultItemConfig.errorRangeMax,
+    enableAdding: req.body.enableAdding !== undefined ? Boolean(req.body.enableAdding) : defaultItemConfig.enableAdding,
+    enableRemoving: req.body.enableRemoving !== undefined ? Boolean(req.body.enableRemoving) : defaultItemConfig.enableRemoving
+  };
+  
+  // Validate configuration
+  if (config.singleItemMass <= 0) {
+    return res.status(400).json({ error: 'Single item mass must be greater than 0' });
+  }
+  if (config.initialItemCount < 0) {
+    return res.status(400).json({ error: 'Initial item count cannot be negative' });
+  }
+  if (config.containerMass < 0) {
+    return res.status(400).json({ error: 'Container mass cannot be negative' });
+  }
+  
+  itemCountingConfig.set(deviceId, config);
+  
+  // Reset state for this device
+  const state = { lastStableWeight: null, currentItemCount: config.initialItemCount };
+  itemCountingState.set(deviceId, state);
+  
+  // Notify all clients of configuration change
+  io.emit('item-config-updated', { deviceId, config, state });
+  
+  res.json({ deviceId, config, state });
+});
+
+app.post('/api/reset-item-count/:deviceId?', (req, res) => {
+  const deviceId = req.params.deviceId || 'WEIGHT_SCALE_001';
+  const config = itemCountingConfig.get(deviceId) || defaultItemConfig;
+  const newCount = parseInt(req.body.itemCount) || 0;
+  
+  if (newCount < 0) {
+    return res.status(400).json({ error: 'Item count cannot be negative' });
+  }
+  
+  const state = itemCountingState.get(deviceId) || { lastStableWeight: null, currentItemCount: config.initialItemCount };
+  state.currentItemCount = newCount;
+  itemCountingState.set(deviceId, state);
+  
+  // Notify all clients of count reset
+  io.emit('item-count-reset', { deviceId, itemCount: newCount });
+  
+  res.json({ deviceId, itemCount: newCount });
 });
 
 // Start server

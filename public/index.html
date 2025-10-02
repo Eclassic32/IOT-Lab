@@ -44,6 +44,23 @@
                 </div>
             </section>
 
+            <section class="card item-count-section">
+                <header class="card-header">
+                    <h2>Item Counter</h2>
+                </header>
+                <div class="card-body">
+                    <div class="item-count-container">
+                        <div id="item-count-value" class="item-count-value">---</div>
+                        <div class="item-count-unit">items</div>
+                    </div>
+                    <div id="item-count-change" class="item-count-change"></div>
+                    <div class="item-controls">
+                        <button id="config-btn" class="btn btn-secondary">Configure</button>
+                        <button id="reset-count-btn" class="btn btn-warning">Reset Count</button>
+                    </div>
+                </div>
+            </section>
+
             <section class="card graph-section">
                 <header class="card-header">
                     <h2>5‑Minute History</h2>
@@ -75,6 +92,68 @@
         <footer class="app-footer">
             <span>IoT Lab • ESP32 • MQTT</span>
         </footer>
+    </div>
+
+    <!-- Item Configuration Modal -->
+    <div id="config-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Item Counting Configuration</h3>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <form id="item-config-form">
+                    <div class="form-group">
+                        <label for="single-item-mass">Single Item Mass (kg):</label>
+                        <input type="number" id="single-item-mass" step="0.001" min="0.001" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="initial-item-count">Initial Item Count:</label>
+                        <input type="number" id="initial-item-count" min="0" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="container-mass">Container/Board Mass (kg):</label>
+                        <input type="number" id="container-mass" step="0.001" min="0" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Sensor Error Range (kg):</label>
+                        <div class="error-range">
+                            <input type="number" id="error-range-min" step="0.001" placeholder="Min error" required>
+                            <span>to</span>
+                            <input type="number" id="error-range-max" step="0.001" placeholder="Max error" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="toggle-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="enable-adding">
+                                <span class="toggle-slider"></span>
+                                Enable Adding Items
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <div class="toggle-group">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="enable-removing">
+                                <span class="toggle-slider"></span>
+                                Enable Removing Items
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="button" id="cancel-config" class="btn btn-secondary">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save Configuration</button>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
 
     <script src="app.js"></script>
